@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   OnDestroy,
+  OnInit,
   ViewChild,
 } from '@angular/core';
 import {
@@ -20,10 +21,11 @@ import {
 } from 'leaflet';
 import { GeoJsonObject } from 'geojson';
 import { parseCountries } from '../layers/parsers';
-import { MultiPolygon } from '../layers/country-types';
+import { Country, MultiPolygon } from '../layers/country-types';
 import countriesCenter from '../layers/countries-center';
 import countriesPolygon from '../layers/countries';
 import * as L from 'leaflet';
+import countries from '../layers/countries';
 
 type shape = Polygon | Marker | Rectangle | Circle | Polyline;
 
@@ -32,11 +34,13 @@ type shape = Polygon | Marker | Rectangle | Circle | Polyline;
   templateUrl: './map.component.html',
   styleUrls: ['./map.component.scss'],
 })
-export class MapComponent implements AfterViewInit, OnDestroy {
+export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
   @ViewChild('map') el!: ElementRef;
 
   mapInstance!: Map;
   tileLayer!: TileLayer;
+
+  worker!: Worker;
 
   mapOptions: MapOptions = {
     zoomControl: true,
@@ -51,6 +55,24 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.setupLeaflet();
     this.setupEventListeners();
     this.addLayers();
+  }
+
+  ngOnInit() {
+    // create a new worker
+    if (typeof Worker !== 'undefined') {
+      // Create a new
+      this.worker = new Worker(new URL('./map.worker', import.meta.url));
+      this.worker.onmessage = ({ data }) => {
+        this.addCountriesPolygonsLayer(data);
+      };
+      // Ideally you would want the worker to fetch the data to prevent
+      // unnecessary copies of the 17Mb of data.
+      // But I don't know if the worker could access the data, so I'm sending it to the worker.
+      this.worker.postMessage(countries);
+    } else {
+      // Web Workers are not supported in this environment.
+      // You should add a fallback so that your program still executes correctly.
+    }
   }
 
   setPosition(positionCallback: (position: GeolocationPosition) => void) {
@@ -140,9 +162,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }).addTo(this.mapInstance);
   }
 
-  addCountriesPolygonsLayer() {
+  addCountriesPolygonsLayer(countries: Country[]) {
     // parse the countries polygons
-    const countries = parseCountries(countriesPolygon);
 
     // map the countries polygons to a geojson feature collection
     const features = countries.map((country) => {
@@ -178,11 +199,12 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   addLayers() {
     this.addCountriesCenterLayer();
-    this.addCountriesPolygonsLayer();
   }
 
   ngOnDestroy() {
     // destroy leaflet instance
     this.mapInstance.remove();
+    // kill the worker
+    this.worker.terminate();
   }
 }

@@ -1,4 +1,3 @@
-import { LatLngExpression } from 'leaflet';
 // ========================= COUNTRY TYPES =========================
 
 /**
@@ -25,7 +24,7 @@ export type Country = {
  * A polygon is a collection of points
  */
 export type Polygon = {
-  coords: LatLngExpression[];
+  coords: [number, number][];
 };
 
 /**

@@ -1,4 +1,3 @@
-import { LatLngExpression } from 'leaflet';
 import { Country, MultiPolygon, Polygon, RawCountry } from './country-types';
 
 /**
@@ -64,7 +63,7 @@ function parsePolygons(polygons: string): Polygon | MultiPolygon | null {
 }
 
 function parsePolygon(polygon: string): Polygon | null {
-  const points: LatLngExpression[] = [];
+  const points: [number, number][] = [];
 
   // polygon = '(1 2, 3 4, 5 6)'
   // it might have a parenthesis at the beginning or at the end, '(((1 2, 3 4, 5 6)' or '(1 2, 3 4))' for example
@@ -84,7 +83,7 @@ function parsePolygon(polygon: string): Polygon | null {
   };
 }
 
-function parsePoint(point: string): LatLngExpression | null {
+function parsePoint(point: string): [number, number] | null {
   // point = '1 2'
   // it might have multiple parenthesis at the beginning or at the end, '(((1 2' or '1 2))' for example
 
