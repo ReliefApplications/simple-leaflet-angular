@@ -40,7 +40,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   mapOptions: MapOptions = {
     zoomControl: true,
-    zoom: 15,
+    zoom: 5,
     center: [48.8584065, 2.2946047],
   };
 
@@ -146,12 +146,29 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
     // map the countries polygons to a geojson feature collection
     const features = countries.map((country) => {
+      const options = {
+        fillColor: [
+          '#2660A4',
+          '#65E7B6',
+          '#F19953',
+          '#E13B88',
+          '#6ADC23',
+          '#EB1717',
+          '#8476E1',
+          '#158C3F',
+        ][country.id % 8],
+        fillOpacity: 0.3,
+      };
+
       if (country.polygons instanceof Array) {
         // multipolygon
-        return L.polygon(country.polygons.map((polygon) => polygon.coords));
+        return L.polygon(
+          country.polygons.map((polygon) => polygon.coords),
+          options
+        );
       } else {
         // polygon
-        return L.polygon(country.polygons.coords);
+        return L.polygon(country.polygons.coords, options);
       }
     });
 
