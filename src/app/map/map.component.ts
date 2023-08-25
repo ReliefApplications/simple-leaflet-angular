@@ -18,7 +18,14 @@ import {
   LatLngExpression,
   circleMarker,
 } from 'leaflet';
+import { GeoJsonObject } from 'geojson';
+import { parseCountries } from '../layers/parsers';
+import { MultiPolygon } from '../layers/country-types';
 import countriesCenter from '../layers/countries-center';
+import countriesPolygon from '../layers/countries';
+import * as L from 'leaflet';
+
+type shape = Polygon | Marker | Rectangle | Circle | Polyline;
 
 @Component({
   selector: 'app-map',
@@ -33,11 +40,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   mapOptions: MapOptions = {
     zoomControl: true,
-    zoom: 18,
-    center: this.getGeoloc(),
+    zoom: 15,
+    center: [48.8584065, 2.2946047],
   };
-  shapes: any[] = [];
-  // shapes: <Polygon | Marker | Polygon | Rectangle | Circle | Polyline>[] = [];
+
+  shapes: shape[] = [];
 
   // wait for view to be rendered, this ensures the div we marked as mapElement will not be null/undefined.
   ngAfterViewInit() {
@@ -46,18 +53,21 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.addLayers();
   }
 
-  getGeoloc(): LatLngExpression {
+  setPosition(positionCallback: (position: GeolocationPosition) => void) {
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        return [position.coords.latitude, position.coords.longitude];
-      });
+      navigator.geolocation.getCurrentPosition(positionCallback);
     }
-    return [48.8584065, 2.2946047];
   }
 
   setupLeaflet() {
     // create leaflet map instance
     this.mapInstance = new Map(this.el.nativeElement, this.mapOptions);
+    this.setPosition((position) => {
+      this.mapInstance.setView([
+        position.coords.latitude,
+        position.coords.longitude,
+      ]);
+    });
 
     // create + add tile layer to map
     this.tileLayer = new TileLayer(
@@ -87,21 +97,32 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   addCountriesCenterLayer() {
-    const features = countriesCenter
-      .filter((country) => country.centerlatitude && country.centerlongitude)
-      .map((country) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [country.centerlongitude, country.centerlatitude],
-        },
-      }));
-    const countriesCenterGeoJSON: any = [
+    // map the countries center to a geojson feature collection
+    const features: GeoJsonObject[] = countriesCenter
+      .filter((country) => country.centerlatitude && country.centerlongitude) // filter out countries without a center
+      .map(
+        (country) =>
+          ({
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: [
+                country.centerlongitude,
+                country.centerlatitude,
+              ] as [string, string],
+            },
+          } as GeoJsonObject)
+      );
+
+    // Feature collection of countries center
+    const countriesCenterGeoJSON: GeoJsonObject[] = [
       {
         type: 'FeatureCollection',
         features: features,
-      },
+      } as GeoJsonObject,
     ];
+
+    // orange circle marker
     const geojsonMarkerOptions = {
       radius: 8,
       fillColor: '#ff7800',
@@ -110,6 +131,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       opacity: 1,
       fillOpacity: 0.8,
     };
+
+    // add geojson layer to map
     geoJSON(countriesCenterGeoJSON, {
       pointToLayer: function (feature, latlng) {
         return circleMarker(latlng, geojsonMarkerOptions);
@@ -117,8 +140,28 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }).addTo(this.mapInstance);
   }
 
+  addCountriesPolygonsLayer() {
+    // parse the countries polygons
+    const countries = parseCountries(countriesPolygon);
+
+    // map the countries polygons to a geojson feature collection
+    const features = countries.map((country) => {
+      if (country.polygons instanceof Array) {
+        // multipolygon
+        return L.polygon(country.polygons.map((polygon) => polygon.coords));
+      } else {
+        // polygon
+        return L.polygon(country.polygons.coords);
+      }
+    });
+
+    // add layers to map
+    L.layerGroup(features).addTo(this.mapInstance);
+  }
+
   addLayers() {
     this.addCountriesCenterLayer();
+    this.addCountriesPolygonsLayer();
   }
 
   ngOnDestroy() {
