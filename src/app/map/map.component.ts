@@ -6,6 +6,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import {
+  geoJSON,
   TileLayer,
   Map,
   MapOptions,
@@ -15,7 +16,9 @@ import {
   Circle,
   Polyline,
   LatLngExpression,
+  circleMarker,
 } from 'leaflet';
+import countriesCenter from '../layers/countries-center';
 
 @Component({
   selector: 'app-map',
@@ -40,6 +43,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit() {
     this.setupLeaflet();
     this.setupEventListeners();
+    this.addLayers();
   }
 
   getGeoloc(): LatLngExpression {
@@ -80,6 +84,41 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       const geoShape = shape.toGeoJSON();
       this.shapes.push(geoShape.geometry);
     });
+  }
+
+  addCountriesCenterLayer() {
+    const features = countriesCenter
+      .filter((country) => country.centerlatitude && country.centerlongitude)
+      .map((country) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [country.centerlongitude, country.centerlatitude],
+        },
+      }));
+    const countriesCenterGeoJSON: any = [
+      {
+        type: 'FeatureCollection',
+        features: features,
+      },
+    ];
+    const geojsonMarkerOptions = {
+      radius: 8,
+      fillColor: '#ff7800',
+      color: '#000',
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.8,
+    };
+    geoJSON(countriesCenterGeoJSON, {
+      pointToLayer: function (feature, latlng) {
+        return circleMarker(latlng, geojsonMarkerOptions);
+      },
+    }).addTo(this.mapInstance);
+  }
+
+  addLayers() {
+    this.addCountriesCenterLayer();
   }
 
   ngOnDestroy() {
