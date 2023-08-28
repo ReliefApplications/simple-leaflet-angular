@@ -16,15 +16,14 @@ import {
   Rectangle,
   Circle,
   Polyline,
-  LatLngExpression,
   circleMarker,
 } from 'leaflet';
 import { GeoJsonObject } from 'geojson';
-import { parseCountries } from '../layers/parsers';
-import { Country, MultiPolygon } from '../layers/country-types';
+import { parseCountries } from '../layers/async-parsers';
 import countriesCenter from '../layers/countries-center';
 import countriesPolygon from '../layers/countries';
 import * as L from 'leaflet';
+import { Subscription, delay, interval, map, zip } from 'rxjs';
 import countries from '../layers/countries';
 
 type shape = Polygon | Marker | Rectangle | Circle | Polyline;
@@ -40,11 +39,13 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
   mapInstance!: Map;
   tileLayer!: TileLayer;
 
+  countrySubscription!: Subscription;
+
   worker!: Worker;
 
   mapOptions: MapOptions = {
     zoomControl: true,
-    zoom: 5,
+    zoom: 2,
     center: [48.8584065, 2.2946047],
   };
 
@@ -162,48 +163,53 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     }).addTo(this.mapInstance);
   }
 
-  addCountriesPolygonsLayer(countries: Country[]) {
-    // parse the countries polygons
+  addCountriesPolygonsLayer() {
+    // parse the countries polygons, get a stream of valid countries
+    this.countrySubscription = parseCountries(countries).subscribe(
+      (country) => {
+        const options = {
+          fillColor: [
+            '#2660A4',
+            '#65E7B6',
+            '#F19953',
+            '#E13B88',
+            '#6ADC23',
+            '#EB1717',
+            '#8476E1',
+            '#158C3F',
+          ][country.id % 8],
+          fillOpacity: 0.3,
+        };
 
-    // map the countries polygons to a geojson feature collection
-    const features = countries.map((country) => {
-      const options = {
-        fillColor: [
-          '#2660A4',
-          '#65E7B6',
-          '#F19953',
-          '#E13B88',
-          '#6ADC23',
-          '#EB1717',
-          '#8476E1',
-          '#158C3F',
-        ][country.id % 8],
-        fillOpacity: 0.3,
-      };
+        let layer: L.Layer;
 
-      if (country.polygons instanceof Array) {
-        // multipolygon
-        return L.polygon(
-          country.polygons.map((polygon) => polygon.coords),
-          options
-        );
-      } else {
-        // polygon
-        return L.polygon(country.polygons.coords, options);
+        if (country.polygons instanceof Array) {
+          // multipolygon
+          layer = L.polygon(
+            country.polygons.map((polygon) => polygon.coords),
+            options
+          );
+        } else {
+          // polygon
+          layer = L.polygon(country.polygons.coords, options);
+        }
+
+        // add layers to map
+        layer.addTo(this.mapInstance);
       }
-    });
-
-    // add layers to map
-    L.layerGroup(features).addTo(this.mapInstance);
+    );
   }
 
   addLayers() {
-    this.addCountriesCenterLayer();
+    // this.addCountriesCenterLayer();
+    this.addCountriesPolygonsLayer();
   }
 
   ngOnDestroy() {
     // destroy leaflet instance
     this.mapInstance.remove();
+    // unsubscribe from country subscription
+    this.countrySubscription.unsubscribe();
     // kill the worker
     this.worker.terminate();
   }
