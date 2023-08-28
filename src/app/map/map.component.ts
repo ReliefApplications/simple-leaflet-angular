@@ -19,13 +19,9 @@ import {
   circleMarker,
 } from 'leaflet';
 import { GeoJsonObject, Point } from 'geojson';
-import { parseCountries } from '../layers/async-parsers';
 import countriesCenter from '../layers/countries-center';
-import countriesPolygon from '../layers/countries';
 import * as L from 'leaflet';
 import { randomPoint } from '@turf/random';
-import { Subscription, delay, interval, map, zip } from 'rxjs';
-import countries from '../layers/countries';
 import { Country } from '../layers/country-types';
 
 type shape = Polygon | Marker | Rectangle | Circle | Polyline;
