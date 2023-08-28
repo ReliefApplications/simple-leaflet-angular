@@ -18,11 +18,12 @@ import {
   Polyline,
   circleMarker,
 } from 'leaflet';
-import { GeoJsonObject } from 'geojson';
+import { GeoJsonObject, Point } from 'geojson';
 import { parseCountries } from '../layers/async-parsers';
 import countriesCenter from '../layers/countries-center';
 import countriesPolygon from '../layers/countries';
 import * as L from 'leaflet';
+import { randomPoint } from '@turf/random';
 import { Subscription, delay, interval, map, zip } from 'rxjs';
 import countries from '../layers/countries';
 import { Country } from '../layers/country-types';
@@ -41,6 +42,11 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
   private tileLayer!: TileLayer;
 
   private worker!: Worker;
+
+  // stress test
+  NUMBER_STRESS_POINTS = 100_000;
+  points = randomPoint(this.NUMBER_STRESS_POINTS);
+  manyPointsLayer: L.GeoJSON | null = null;
 
   private mapOptions: MapOptions = {
     zoomControl: true,
@@ -115,6 +121,20 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
         | Polyline;
       const geoShape = shape.toGeoJSON();
       this.shapes.push(geoShape.geometry);
+    });
+
+    // listen to the moveend event to recalculate the points on the map
+    this.mapInstance.on('moveend', (e) => {
+      if (!this.manyPointsLayer) {
+        return;
+      }
+      this.mapInstance.removeLayer(this.manyPointsLayer);
+      this.addManyRandomPoints();
+
+      console.log(
+        'Number of points on the map:',
+        this.manyPointsLayer.getLayers().length
+      );
     });
   }
 
@@ -194,9 +214,41 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     layer.addTo(this.mapInstance);
   }
 
+  addManyRandomPoints() {
+    // blue circle marker
+    const geojsonMarkerOptions = {
+      radius: 4,
+      fillColor: '#4169e1',
+      color: '#000',
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.8,
+    };
+
+    // add geojson layer to map
+    this.manyPointsLayer = geoJSON(this.points, {
+      pointToLayer: function (feature, latlng) {
+        return circleMarker(latlng, geojsonMarkerOptions);
+      },
+      filter: this.filterNonVisiblePoints.bind(this),
+    }).addTo(this.mapInstance);
+  }
+
+  filterNonVisiblePoints(
+    feature: GeoJSON.Feature<Point, GeoJSON.GeoJsonProperties>
+  ): boolean {
+    // filter out points that are not visible on the map
+    const bounds = this.mapInstance.getBounds().pad(0.1); // add some padding to include a few points outside the map
+    const point = L.latLng(
+      feature.geometry.coordinates[1],
+      feature.geometry.coordinates[0]
+    ); // don't ask why everything is reversed
+    return bounds.contains(point);
+  }
+
   addLayers() {
     this.addCountriesCenterLayer();
-    // this.addCountriesPolygonsLayer();
+    this.addManyRandomPoints();
   }
 
   ngOnDestroy() {

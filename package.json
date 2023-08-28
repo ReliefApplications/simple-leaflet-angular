@@ -18,6 +18,7 @@
     "@angular/platform-browser": "^15.1.0",
     "@angular/platform-browser-dynamic": "^15.1.0",
     "@angular/router": "^15.1.0",
+    "@turf/random": "^6.5.0",
     "@types/geojson": "^7946.0.10",
     "@types/leaflet": "^1.9.3",
     "leaflet": "^1.9.4",
