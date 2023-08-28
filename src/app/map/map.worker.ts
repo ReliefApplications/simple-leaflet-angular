@@ -1,8 +1,13 @@
 /// <reference lib="webworker" />
 
-import { parseCountries } from '../layers/parsers';
+import { parseCountries } from '../layers/async-parsers';
+import countries from '../layers/countries';
 
 addEventListener('message', ({ data }) => {
-  const countries = parseCountries(data);
-  postMessage(countries);
+  const subscription = parseCountries(countries).subscribe((country) => {
+    postMessage(country);
+  });
+
+  // check memory leaks
+  // subscription.unsubscribe();
 });

@@ -25,6 +25,7 @@ import countriesPolygon from '../layers/countries';
 import * as L from 'leaflet';
 import { Subscription, delay, interval, map, zip } from 'rxjs';
 import countries from '../layers/countries';
+import { Country } from '../layers/country-types';
 
 type shape = Polygon | Marker | Rectangle | Circle | Polyline;
 
@@ -36,20 +37,18 @@ type shape = Polygon | Marker | Rectangle | Circle | Polyline;
 export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
   @ViewChild('map') el!: ElementRef;
 
-  mapInstance!: Map;
-  tileLayer!: TileLayer;
+  private mapInstance!: Map;
+  private tileLayer!: TileLayer;
 
-  countrySubscription!: Subscription;
+  private worker!: Worker;
 
-  worker!: Worker;
-
-  mapOptions: MapOptions = {
+  private mapOptions: MapOptions = {
     zoomControl: true,
     zoom: 2,
     center: [48.8584065, 2.2946047],
   };
 
-  shapes: shape[] = [];
+  private shapes: shape[] = []; // tbh I don't know what this is for
 
   // wait for view to be rendered, this ensures the div we marked as mapElement will not be null/undefined.
   ngAfterViewInit() {
@@ -64,12 +63,12 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
       // Create a new
       this.worker = new Worker(new URL('./map.worker', import.meta.url));
       this.worker.onmessage = ({ data }) => {
-        this.addCountriesPolygonsLayer(data);
+        this.addCountryPolygonsLayer(data);
       };
       // Ideally you would want the worker to fetch the data to prevent
       // unnecessary copies of the 17Mb of data.
       // But I don't know if the worker could access the data, so I'm sending it to the worker.
-      this.worker.postMessage(countries);
+      this.worker.postMessage(null);
     } else {
       // Web Workers are not supported in this environment.
       // You should add a fallback so that your program still executes correctly.
@@ -163,53 +162,46 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     }).addTo(this.mapInstance);
   }
 
-  addCountriesPolygonsLayer() {
-    // parse the countries polygons, get a stream of valid countries
-    this.countrySubscription = parseCountries(countries).subscribe(
-      (country) => {
-        const options = {
-          fillColor: [
-            '#2660A4',
-            '#65E7B6',
-            '#F19953',
-            '#E13B88',
-            '#6ADC23',
-            '#EB1717',
-            '#8476E1',
-            '#158C3F',
-          ][country.id % 8],
-          fillOpacity: 0.3,
-        };
+  addCountryPolygonsLayer(country: Country) {
+    const options = {
+      fillColor: [
+        '#2660A4',
+        '#65E7B6',
+        '#F19953',
+        '#E13B88',
+        '#6ADC23',
+        '#EB1717',
+        '#8476E1',
+        '#158C3F',
+      ][country.id % 8],
+      fillOpacity: 0.3,
+    };
 
-        let layer: L.Layer;
+    let layer: L.Layer;
 
-        if (country.polygons instanceof Array) {
-          // multipolygon
-          layer = L.polygon(
-            country.polygons.map((polygon) => polygon.coords),
-            options
-          );
-        } else {
-          // polygon
-          layer = L.polygon(country.polygons.coords, options);
-        }
+    if (country.polygons instanceof Array) {
+      // multipolygon
+      layer = L.polygon(
+        country.polygons.map((polygon) => polygon.coords),
+        options
+      );
+    } else {
+      // polygon
+      layer = L.polygon(country.polygons.coords, options);
+    }
 
-        // add layers to map
-        layer.addTo(this.mapInstance);
-      }
-    );
+    // add layers to map
+    layer.addTo(this.mapInstance);
   }
 
   addLayers() {
-    // this.addCountriesCenterLayer();
-    this.addCountriesPolygonsLayer();
+    this.addCountriesCenterLayer();
+    // this.addCountriesPolygonsLayer();
   }
 
   ngOnDestroy() {
     // destroy leaflet instance
     this.mapInstance.remove();
-    // unsubscribe from country subscription
-    this.countrySubscription.unsubscribe();
     // kill the worker
     this.worker.terminate();
   }
