@@ -195,6 +195,9 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
   addManyRandomPoints() {
     this.clusterGroup = L.markerClusterGroup();
 
+    // stress test
+    this.clusterGroup.addLayers(this.stressPoints);
+
     this.mapInstance.addLayer(this.clusterGroup);
   }
 
@@ -207,9 +210,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
   addLayers() {
     this.addCountriesCenterLayer();
     this.addManyRandomPoints();
-
-    // stress test
-    this.clusterGroup.addLayers(this.stressPoints);
   }
 
   ngOnDestroy() {
