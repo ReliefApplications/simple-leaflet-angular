@@ -1,5 +1,40 @@
 import { Subject } from 'rxjs';
 import { Country, MultiPolygon, Polygon, RawCountry } from './country-types';
+import { Wkt } from 'wicket';
+import { GeoJsonObject, Geometry } from 'geojson';
+
+export type GeoCountry = {
+  id: number;
+  geoJSON: GeoJsonObject | GeoJsonObject[];
+};
+
+export function parseCountries(data: RawCountry[]): Subject<GeoCountry> {
+  const obs: Subject<GeoCountry> = new Subject<GeoCountry>();
+
+  setTimeout(() => {
+    for (const rawCountry of data) {
+      if (!rawCountry.polygons) {
+        continue;
+      }
+
+      const parser = new Wkt();
+      parser.read(rawCountry.polygons);
+
+      obs.next({
+        id: rawCountry.id,
+        geoJSON: {
+          type: 'Feature',
+          properties: {},
+          geometry: parser.toJson(),
+        } as GeoJsonObject,
+      });
+    }
+
+    obs.complete();
+  }, 0);
+
+  return obs;
+}
 
 /**
  * Parses the data coming from the database
@@ -10,7 +45,7 @@ import { Country, MultiPolygon, Polygon, RawCountry } from './country-types';
  * @param data the string data coming from the database
  * @returns a stream of valid countries
  */
-export function parseCountries(data: RawCountry[]): Subject<Country> {
+export function _parseCountries(data: RawCountry[]): Subject<Country> {
   const obs: Subject<Country> = new Subject<Country>();
 
   setTimeout(() => {

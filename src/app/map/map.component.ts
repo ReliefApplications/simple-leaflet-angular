@@ -18,11 +18,11 @@ import {
   Polyline,
   circleMarker,
 } from 'leaflet';
-import { GeoJsonObject, Point } from 'geojson';
+import { GeoJsonObject, Geometry, Point } from 'geojson';
 import countriesCenter from '../layers/countries-center';
 import * as L from 'leaflet';
 import { randomPoint } from '@turf/random';
-import { Country } from '../layers/country-types';
+import { GeoCountry } from '../layers/async-parsers';
 
 type shape = Polygon | Marker | Rectangle | Circle | Polyline;
 
@@ -40,7 +40,7 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
   private worker!: Worker;
 
   // stress test
-  NUMBER_STRESS_POINTS = 100_000;
+  NUMBER_STRESS_POINTS = 0;
   points = randomPoint(this.NUMBER_STRESS_POINTS);
   manyPointsLayer: L.GeoJSON | null = null;
 
@@ -178,7 +178,7 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     }).addTo(this.mapInstance);
   }
 
-  addCountryPolygonsLayer(country: Country) {
+  addCountryPolygonsLayer(country: GeoCountry) {
     const options = {
       fillColor: [
         '#2660A4',
@@ -191,23 +191,10 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
         '#158C3F',
       ][country.id % 8],
       fillOpacity: 0.3,
-    };
-
-    let layer: L.Layer;
-
-    if (country.polygons instanceof Array) {
-      // multipolygon
-      layer = L.polygon(
-        country.polygons.map((polygon) => polygon.coords),
-        options
-      );
-    } else {
-      // polygon
-      layer = L.polygon(country.polygons.coords, options);
-    }
+    } as L.GeoJSONOptions<any, Geometry>;
 
     // add layers to map
-    layer.addTo(this.mapInstance);
+    geoJSON(country.geoJSON, options).addTo(this.mapInstance);
   }
 
   addManyRandomPoints() {
