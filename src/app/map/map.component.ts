@@ -18,10 +18,10 @@ import {
   Polyline,
   circleMarker,
 } from 'leaflet';
-import { GeoJsonObject, Geometry, Point } from 'geojson';
+import { FeatureCollection, GeoJsonObject, Geometry, Point } from 'geojson';
 import countriesCenter from '../layers/countries-center';
 import * as L from 'leaflet';
-import { randomPoint } from '@turf/random';
+import 'leaflet.markercluster';
 import { GeoCountry } from '../layers/async-parsers';
 
 type shape = Polygon | Marker | Rectangle | Circle | Polyline;
@@ -40,13 +40,13 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
   private worker!: Worker;
 
   // stress test
-  NUMBER_STRESS_POINTS = 0;
-  points = randomPoint(this.NUMBER_STRESS_POINTS);
-  manyPointsLayer: L.GeoJSON | null = null;
+  NUMBER_STRESS_POINTS = 100_000;
+  private clusterGroup: L.MarkerClusterGroup;
+  private stressPoints: L.Marker[] = [];
 
   private mapOptions: MapOptions = {
     zoomControl: true,
-    zoom: 2,
+    zoom: 4,
     center: [48.8584065, 2.2946047],
   };
 
@@ -54,6 +54,11 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
 
   // wait for view to be rendered, this ensures the div we marked as mapElement will not be null/undefined.
   ngAfterViewInit() {
+    // stress test
+    for (let i = 0; i < this.NUMBER_STRESS_POINTS; i++) {
+      this.stressPoints.push(L.marker(this.randomLatLng()));
+    }
+
     this.setupLeaflet();
     this.setupEventListeners();
     this.addLayers();
@@ -117,20 +122,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
         | Polyline;
       const geoShape = shape.toGeoJSON();
       this.shapes.push(geoShape.geometry);
-    });
-
-    // listen to the moveend event to recalculate the points on the map
-    this.mapInstance.on('moveend', (e) => {
-      if (!this.manyPointsLayer) {
-        return;
-      }
-      this.mapInstance.removeLayer(this.manyPointsLayer);
-      this.addManyRandomPoints();
-
-      console.log(
-        'Number of points on the map:',
-        this.manyPointsLayer.getLayers().length
-      );
     });
   }
 
@@ -197,41 +188,28 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     geoJSON(country.geoJSON, options).addTo(this.mapInstance);
   }
 
-  addManyRandomPoints() {
-    // blue circle marker
-    const geojsonMarkerOptions = {
-      radius: 4,
-      fillColor: '#4169e1',
-      color: '#000',
-      weight: 1,
-      opacity: 1,
-      fillOpacity: 0.8,
-    };
-
-    // add geojson layer to map
-    this.manyPointsLayer = geoJSON(this.points, {
-      pointToLayer: function (feature, latlng) {
-        return circleMarker(latlng, geojsonMarkerOptions);
-      },
-      filter: this.filterNonVisiblePoints.bind(this),
-    }).addTo(this.mapInstance);
+  randomLatLng(): L.LatLngExpression {
+    return new L.LatLng(Math.random() * 180 - 90, Math.random() * 360 - 180);
   }
 
-  filterNonVisiblePoints(
-    feature: GeoJSON.Feature<Point, GeoJSON.GeoJsonProperties>
-  ): boolean {
+  addManyRandomPoints() {
+    this.clusterGroup = L.markerClusterGroup();
+
+    this.mapInstance.addLayer(this.clusterGroup);
+  }
+
+  filterNonVisiblePoints(point: L.LatLngExpression): boolean {
     // filter out points that are not visible on the map
-    const bounds = this.mapInstance.getBounds().pad(0.1); // add some padding to include a few points outside the map
-    const point = L.latLng(
-      feature.geometry.coordinates[1],
-      feature.geometry.coordinates[0]
-    ); // don't ask why everything is reversed
+    const bounds = this.mapInstance.getBounds();
     return bounds.contains(point);
   }
 
   addLayers() {
     this.addCountriesCenterLayer();
     this.addManyRandomPoints();
+
+    // stress test
+    this.clusterGroup.addLayers(this.stressPoints);
   }
 
   ngOnDestroy() {
