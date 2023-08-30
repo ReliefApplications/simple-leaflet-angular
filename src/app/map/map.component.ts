@@ -3,50 +3,36 @@ import {
   Component,
   ElementRef,
   OnDestroy,
-  OnInit,
   ViewChild,
 } from '@angular/core';
-import {
-  geoJSON,
-  TileLayer,
-  Map,
-  MapOptions,
-  Polygon,
-  Marker,
-  Rectangle,
-  Circle,
-  Polyline,
-  circleMarker,
-} from 'leaflet';
-import { FeatureCollection, GeoJsonObject, Geometry, Point } from 'geojson';
+import { GeoJsonObject, Geometry } from 'geojson';
 import countriesCenter from '../layers/countries-center';
 import * as L from 'leaflet';
 import 'leaflet.markercluster';
 import { GeoCountry } from '../layers/async-parsers';
 
-type shape = Polygon | Marker | Rectangle | Circle | Polyline;
+type shape = L.Polygon | L.Marker | L.Rectangle | L.Circle | L.Polyline;
 
 @Component({
   selector: 'app-map',
   templateUrl: './map.component.html',
   styleUrls: ['./map.component.scss'],
 })
-export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
+export class MapComponent implements AfterViewInit, OnDestroy {
   @ViewChild('map') el!: ElementRef;
 
-  private mapInstance!: Map;
-  private tileLayer!: TileLayer;
+  private mapInstance!: L.Map;
 
-  private worker!: Worker;
+  private countryWorker!: Worker;
 
   // stress test
-  NUMBER_STRESS_POINTS = 100_000;
+  private NUMBER_STRESS_POINTS = 100_000;
   private clusterGroup: L.MarkerClusterGroup;
   private stressPoints: L.Marker[] = [];
 
-  private mapOptions: MapOptions = {
+  private mapOptions: L.MapOptions = {
     zoomControl: true,
-    zoom: 4,
+    zoom: 15,
     center: [48.8584065, 2.2946047],
   };
 
@@ -54,6 +40,18 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
 
   // wait for view to be rendered, this ensures the div we marked as mapElement will not be null/undefined.
   ngAfterViewInit() {
+    // create a new worker
+    if (typeof Worker !== 'undefined') {
+      // Country worker
+      this.countryWorker = new Worker(new URL('./map.worker', import.meta.url));
+      this.countryWorker.onmessage = ({ data }) => {
+        this.addCountryPolygonsLayer(data);
+      };
+    } else {
+      // Web Workers are not supported in this environment.
+      // You should add a fallback so that your program still executes correctly.
+    }
+
     // stress test
     for (let i = 0; i < this.NUMBER_STRESS_POINTS; i++) {
       this.stressPoints.push(L.marker(this.randomLatLng()));
@@ -64,49 +62,28 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     this.addLayers();
   }
 
-  ngOnInit() {
-    // create a new worker
-    if (typeof Worker !== 'undefined') {
-      // Create a new
-      this.worker = new Worker(new URL('./map.worker', import.meta.url));
-      this.worker.onmessage = ({ data }) => {
-        this.addCountryPolygonsLayer(data);
-      };
-      // Ideally you would want the worker to fetch the data to prevent
-      // unnecessary copies of the 17Mb of data.
-      // But I don't know if the worker could access the data, so I'm sending it to the worker.
-      this.worker.postMessage(null);
-    } else {
-      // Web Workers are not supported in this environment.
-      // You should add a fallback so that your program still executes correctly.
-    }
-  }
-
-  setPosition(positionCallback: (position: GeolocationPosition) => void) {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(positionCallback);
-    }
+  randomLatLng(): L.LatLngExpression {
+    return new L.LatLng(Math.random() * 180 - 90, Math.random() * 360 - 180);
   }
 
   setupLeaflet() {
     // create leaflet map instance
-    this.mapInstance = new Map(this.el.nativeElement, this.mapOptions);
-    this.setPosition((position) => {
-      this.mapInstance.setView([
-        position.coords.latitude,
-        position.coords.longitude,
-      ]);
-    });
+    this.mapInstance = new L.Map(this.el.nativeElement, this.mapOptions);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        this.mapInstance.setView([
+          position.coords.latitude,
+          position.coords.longitude,
+        ]);
+      });
+    }
 
     // create + add tile layer to map
-    this.tileLayer = new TileLayer(
-      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {
-        maxZoom: 19,
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      }
-    ).addTo(this.mapInstance);
+    new L.TileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(this.mapInstance);
   }
 
   setupEventListeners() {
@@ -114,12 +91,12 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     // if you find a missing definition, please add and open a PR
     this.mapInstance.on('pm:create', (e) => {
       const shape = e.layer as
-        | Polygon
-        | Marker
-        | Polygon
-        | Rectangle
-        | Circle
-        | Polyline;
+        | L.Polygon
+        | L.Marker
+        | L.Polygon
+        | L.Rectangle
+        | L.Circle
+        | L.Polyline;
       const geoShape = shape.toGeoJSON();
       this.shapes.push(geoShape.geometry);
     });
@@ -162,9 +139,9 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     };
 
     // add geojson layer to map
-    geoJSON(countriesCenterGeoJSON, {
+    L.geoJSON(countriesCenterGeoJSON, {
       pointToLayer: function (feature, latlng) {
-        return circleMarker(latlng, geojsonMarkerOptions);
+        return L.circleMarker(latlng, geojsonMarkerOptions);
       },
     }).addTo(this.mapInstance);
   }
@@ -185,29 +162,30 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     } as L.GeoJSONOptions<any, Geometry>;
 
     // add layers to map
-    geoJSON(country.geoJSON, options).addTo(this.mapInstance);
-  }
-
-  randomLatLng(): L.LatLngExpression {
-    return new L.LatLng(Math.random() * 180 - 90, Math.random() * 360 - 180);
+    L.geoJSON(country.geoJSON, options).addTo(this.mapInstance);
   }
 
   addManyRandomPoints() {
-    this.clusterGroup = L.markerClusterGroup();
-
-    // stress test
-    this.clusterGroup.addLayers(this.stressPoints);
+    this.clusterGroup = L.markerClusterGroup({
+      maxClusterRadius: 200, // Distance between clusters
+      removeOutsideVisibleBounds: true, // Remove markers that are outside the bounds of the map
+      chunkedLoading: true, // Load markers in chunks
+      chunkInterval: 250, // Time interval (in ms) during which addLayers works before pausing to let the rest of the page process
+      chunkDelay: 50, // Time delay (in ms) between consecutive periods of processing for addLayers
+    });
 
     this.mapInstance.addLayer(this.clusterGroup);
-  }
 
-  filterNonVisiblePoints(point: L.LatLngExpression): boolean {
-    // filter out points that are not visible on the map
-    const bounds = this.mapInstance.getBounds();
-    return bounds.contains(point);
+    // stress test
+    // it would be great if this could be done in a worker, but it's not possible since the worker can't access the DOM
+    this.clusterGroup.addLayers(this.stressPoints);
   }
 
   addLayers() {
+    // Ideally you would want the worker to fetch the data to prevent
+    // unnecessary copies of the 17Mb of data.
+    this.countryWorker.postMessage(null); // This will trigger the worker to start parsing the data
+
     this.addCountriesCenterLayer();
     this.addManyRandomPoints();
   }
@@ -216,6 +194,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, OnInit {
     // destroy leaflet instance
     this.mapInstance.remove();
     // kill the worker
-    this.worker.terminate();
+    this.countryWorker.terminate();
   }
 }
